@@ -69,8 +69,8 @@ To use these scripts, you need to have Python 3 installed, along with several sc
 
 1.  **Clone the repository (or download the files):**
     ```bash
-    git clone <your-repo-url>
-    cd <your-repo-name>
+    git clone https://github.com/hollabharath/fNIRS_PARAM
+    cd fNIRS_PARAM
     ```
 
 2.  **Install the required packages:**
