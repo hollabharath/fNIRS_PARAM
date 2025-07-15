@@ -1,0 +1,6 @@
+mne
+mne_nirs
+pandas
+numpy
+matplotlib
+seaborn
