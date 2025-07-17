@@ -6,15 +6,16 @@ fNIRS Resting-State Connectivity Pipeline
 Description:
 This script runs a full preprocessing pipeline on fNIRS data for resting-state
 connectivity analysis. It takes a directory of .snirf files, performs quality
-control (SCI), corrects for motion artifacts (TDDR), filters the data, and
-calculates a channel-wise correlation matrix for the HbO signal. Bad channels
-are marked as NA in the final output.
+control (SCI), automatically applies short-channel regression if available,
+corrects for motion artifacts (TDDR), filters the data, and calculates a
+channel-wise correlation matrix for the HbO signal. Bad channels are marked
+as NA in the final output.
 
 Author:
 Dr. Bharath Holla, hollabharath@gmail.com
 
 Date:
-July 16, 2025
+July 17, 2025
 """
 
 import os
@@ -26,10 +27,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from itertools import compress
 
-# This check runs before attempting to import MNE and other heavy libraries.
 def check_requirements():
     """Checks if all required packages are installed."""
-    # Add seaborn to the list of requirements for this script
     required_packages = ['mne', 'mne_nirs', 'pandas', 'matplotlib', 'seaborn']
     missing_packages = []
     print("Checking for required packages...")
@@ -52,12 +51,15 @@ def check_requirements():
 # Now import the necessary libraries
 import mne
 import seaborn as sns
+import mne_nirs
 from mne.preprocessing.nirs import (
     optical_density,
     scalp_coupling_index,
+    source_detector_distances,
     temporal_derivative_distribution_repair,
     beer_lambert_law
 )
+from mne_nirs.signal_enhancement import short_channel_regression
 
 def get_canonical_name(ch_name):
     """Extracts the base source-detector name (e.g., 'S1_D1') from a full channel name."""
@@ -85,9 +87,24 @@ def preprocess_and_generate_connectivity(snirf_file, output_dir, sci_threshold=0
     print(f"  Identified {len(bad_canonical_names)} bad channel pairs based on SCI < {sci_threshold}")
 
     # --- 2. Preprocessing ---
+    
+    # Check for short channels
+    distances = source_detector_distances(raw_od.info)
+    
+    # If short channels exist, apply regression
+    if np.any(distances < 0.01):
+        print("  Short channels found. Applying short-channel regression...")
+        raw_od_corrected_1 = short_channel_regression(raw_od)
+    else:
+        print("  No short channels found. Skipping short-channel regression.")
+        raw_od_corrected_1 = raw_od # Pass data through unchanged
+        
+    # Apply TDDR for further motion correction
     print("  Applying TDDR for motion correction...")
-    raw_od_corrected = temporal_derivative_distribution_repair(raw_od)
-    raw_haemo = beer_lambert_law(raw_od_corrected, ppf=0.1)
+    raw_od_corrected_2 = temporal_derivative_distribution_repair(raw_od_corrected_1)
+    
+    # Convert to hemoglobin and filter
+    raw_haemo = beer_lambert_law(raw_od_corrected_2, ppf=6.0)
     print("  Applying band-pass filter (0.01 - 0.8 Hz)...")
     raw_haemo.filter(0.01, 0.8, l_trans_bandwidth='auto', h_trans_bandwidth='auto')
 
@@ -116,7 +133,7 @@ def preprocess_and_generate_connectivity(snirf_file, output_dir, sci_threshold=0
     print(f"  -> Connectivity matrix saved to: {os.path.basename(csv_path)}")
 
     fig, ax = plt.subplots(figsize=(12, 10))
-    sns.heatmap(df_corr, cmap='viridis', ax=ax, annot=False, cbar_kws={'label': 'Pearson Correlation'})
+    sns.heatmap(df_corr, cmap='coolwarm',vmin=-1, vmax=1, ax=ax, annot=False, cbar_kws={'label': 'Pearson Correlation'})
     ax.set_title(f"Connectivity Heatmap (HbO) - {basename}")
     fig_path = os.path.join(output_dir, f"{basename}_connectivity_heatmap.png")
     fig.savefig(fig_path, dpi=300, bbox_inches='tight')
