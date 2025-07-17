@@ -43,6 +43,7 @@ This script runs a complete preprocessing pipeline on resting-state fNIRS data a
 ### Features
 
 -   Performs initial quality control using the Scalp Coupling Index (SCI) to identify and exclude bad channels.
+-   If short channels (<1 cm) are detected, automatically apply Short-Channel Regression to remove physiological noise like heartbeat, respiration, and blood pressure changes directly at the source.
 -   Applies the Temporal Derivative Distribution Repair (TDDR) algorithm for motion correction.
 -   Converts optical density to hemoglobin concentration using the modified Beer-Lambert Law.
 -   Applies a band-pass filter (0.01 - 0.8 Hz) to isolate the signal of interest.
