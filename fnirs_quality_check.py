@@ -49,7 +49,7 @@ def check_requirements():
 
 # Now import the heavy libraries
 import mne
-from mne.preprocessing.nirs import optical_density, scalp_coupling_index, beer_lambert_law
+from mne.preprocessing.nirs import optical_density, scalp_coupling_index, beer_lambert_law, source_detector_distances
 import mne_nirs
 from mne_nirs.visualisation import plot_timechannel_quality_metric
 from mne_nirs.preprocessing import scalp_coupling_index_windowed
@@ -64,7 +64,30 @@ def process_snirf_file(snirf_file, output_pdf_dir, sci_threshold=0.5):
 
     try:
         raw_intensity = mne.io.read_raw_snirf(snirf_file, preload=True)
+
+        # --- Unit detection and correction ---
+        montage = raw_intensity.get_montage()
+        from mne.preprocessing.nirs import source_detector_distances
+        orig_distances = source_detector_distances(raw_intensity.info)
+        median_dist = np.median(orig_distances)
+
+        if median_dist < 0.01:
+            scale_factor = 10
+        elif median_dist < 0.001:
+            scale_factor = 100
+        elif median_dist > 0.05:
+            scale_factor = 0.1
+        else:
+            scale_factor = 1
+
+        if scale_factor != 1:
+            print(f"  Rescaling optode coordinates by ×{scale_factor} (median S-D dist: {median_dist:.4f} m)")
+            for dig in montage.dig:
+                dig['r'] *= scale_factor
+            raw_intensity.set_montage(montage)
+
         raw_od = optical_density(raw_intensity)
+
     except Exception as e:
         print(f"  Error loading {snirf_file}: {e}")
         return None

@@ -78,6 +78,32 @@ def preprocess_and_generate_connectivity(snirf_file, output_dir, sci_threshold=0
     except Exception as e:
         print(f"  Error loading file: {e}")
         return
+        
+    # --- Unit detection and correction ---
+    # Detect original distances
+    montage = raw_intensity.get_montage()
+    orig_distances = source_detector_distances(raw_intensity.info)
+    median_dist = np.median(orig_distances)
+
+    # Choose scale factor based on how far the median is from expected range
+    # Typical: 2.5–3.5 cm (i.e., 0.025–0.035 m)
+    if median_dist < 0.01:
+        scale_factor = 10  # Stored in meters, expecting cm
+    elif median_dist < 0.001:
+        scale_factor = 100  # Stored in meters, but must be mm
+    elif median_dist > 0.1:
+        scale_factor = 0.1  # Stored in cm, but interpreted as mm
+    else:
+        scale_factor = 1  # No correction needed
+
+    # Apply correction if needed
+    if scale_factor != 1:
+        print(f"  Median S-D distance = {median_dist:.4f} m → Rescaling montage by ×{scale_factor}")
+        for dig in montage.dig:
+            dig['r'] *= scale_factor
+        raw_intensity.set_montage(montage)
+    else:
+        print(f"  S-D distances look normal (median = {median_dist*100:.2f} cm). No scaling applied.")
 
     raw_od = optical_density(raw_intensity)
     sci = scalp_coupling_index(raw_od)
